@@ -1,0 +1,8 @@
+{
+  "name": "AL-HARAM STORE",
+  "description": "Premium luxury Pakistani and Eastern fashion clothing store featuring unstitched fabric, prêt, festive collections, and an all-in-one store management dashboard.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

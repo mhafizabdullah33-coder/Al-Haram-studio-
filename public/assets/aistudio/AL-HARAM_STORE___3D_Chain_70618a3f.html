@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AL-HARAM STORE – 3D Chain</title>
+<style>
+:root{color-scheme:dark;--bg:#0b0909;--fg:#f4efe8;--muted:#b9b0a4;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:Georgia,'Times New Roman',serif}
+#gl{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none}
+nav{position:fixed;top:0;left:0;right:0;z-index:2;display:flex;justify-content:space-between;padding:20px 28px;font:600 13px/1 system-ui,sans-serif;letter-spacing:.2em}
+section{position:relative;z-index:1;min-height:100vh;display:flex;flex-direction:column;justify-content:center;padding:0 8vw}
+h1,h2{margin:0 0 14px;font-weight:400;font-size:clamp(40px,9vw,110px);line-height:1;letter-spacing:-.02em}
+p{max-width:420px;color:var(--muted);font:16px/1.6 system-ui,sans-serif;margin:0 0 24px}
+a.btn{align-self:flex-start;padding:12px 22px;border:1px solid var(--fg);color:var(--fg);text-decoration:none;font:600 12px system-ui,sans-serif;letter-spacing:.15em}
+section:nth-of-type(2){align-items:flex-end;text-align:right}
+section:nth-of-type(2) a.btn{align-self:flex-end}
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<nav><span>AL-HARAM</span><span>COLLECTIONS · CONTACT</span></nav>
+<section><h1>Luxury<br>Eastern Wear</h1><p>Premium unstitched fabric, festive prêt, luxury lawn, khaddar and cotton.</p><a class="btn" href="#">SHOP NOW</a></section>
+<section><h2>Festive Prêt</h2><p>Designer pieces crafted for your most special occasions.</p><a class="btn" href="#">EXPLORE</a></section>
+<section><h2>Unstitched<br>Fabric</h2><p>Fine lawn, khaddar and cotton, woven to last.</p><a class="btn" href="#">VIEW FABRICS</a></section>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const COUNT = 80;
+const canvas = document.getElementById('gl');
+const renderer = new THREE.WebGLRenderer({canvas, antialias:true, alpha:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+
+// Step 7: environment map (without it chrome looks black)
+const envScene = new THREE.Scene();
+envScene.add(new THREE.Mesh(new THREE.BoxGeometry(40,40,40), new THREE.MeshBasicMaterial({color:0x151212, side:THREE.BackSide})));
+[[0,15,0,20,1,20,0xffffff],[-15,0,5,1,12,12,0xffffff],[15,0,-5,1,10,10,0xffd9b0],[0,-10,12,16,1,6,0x888888]].forEach(([x,y,z,w,h,d,c])=>{
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), new THREE.MeshBasicMaterial({color:c}));
+  m.position.set(x,y,z); envScene.add(m);
+});
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(envScene).texture;
+
+// Step 1: one link = TorusGeometry(0.5, 0.12) stretched y 1.6
+const geo = new THREE.TorusGeometry(0.5, 0.12, 24, 48);
+geo.scale(1, 1.6, 1);
+const mat = new THREE.MeshStandardMaterial({color:0xffffff, metalness:1, roughness:0.2});
+
+// Step 2: 80 links, one InstancedMesh (one draw call)
+const chain = new THREE.InstancedMesh(geo, mat, COUNT);
+chain.frustumCulled = false;
+scene.add(chain);
+
+// Step 3: path through points across every section
+const curve = new THREE.CatmullRomCurve3([
+  new THREE.Vector3(-9, 6, 0), new THREE.Vector3(-2, 4, 1), new THREE.Vector3(5, 5, -1),
+  new THREE.Vector3(8, 0, 0.5), new THREE.Vector3(2, -2, 1.5), new THREE.Vector3(-6, -3, 0),
+  new THREE.Vector3(-8, -6, -1), new THREE.Vector3(0, -7, 1), new THREE.Vector3(9, -6, 0)
+], false, 'catmullrom', 0.5);
+const spacing = curve.getLength() / COUNT;
+const linkScale = spacing / 1.25;   // so neighbouring links overlap and interlock
+
+// Step 8: light colour per section: white, red, cyan rgb(80,220,255)
+const colors = [new THREE.Color(1,1,1), new THREE.Color(1,0.1,0.1), new THREE.Color(80/255,220/255,1)];
+const light1 = new THREE.PointLight(0xffffff, 3, 0, 2); light1.position.set(-6, 6, 8);
+const light2 = new THREE.PointLight(0xffffff, 2, 0, 2); light2.position.set(8, -4, 6);
+scene.add(light1, light2, new THREE.AmbientLight(0xffffff, 0.15));
+
+const up = new THREE.Vector3(0,1,0), yAxis = new THREE.Vector3(0,1,0);
+const p = new THREE.Vector3(), tan = new THREE.Vector3();
+const q = new THREE.Quaternion(), q90 = new THREE.Quaternion().setFromAxisAngle(yAxis, Math.PI/2);
+const dummy = new THREE.Object3D();
+const tmpC = new THREE.Color();
+
+let target = 0, offset = 0;
+function scrollProgress(){
+  const max = Math.max(1, document.documentElement.scrollHeight - innerHeight);
+  return Math.min(1, Math.max(0, scrollY / max));
+}
+// Step 6: scroll moves the offset
+addEventListener('scroll', () => { target = scrollProgress(); }, {passive:true});
+
+function resize(){
+  const w = innerWidth, h = innerHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.position.set(0, 0, Math.max(15, 17 / camera.aspect));
+  camera.updateProjectionMatrix();
+}
+addEventListener('resize', resize); resize();
+
+function frame(){
+  offset += (target - offset) * 0.08;
+  const off = offset * 1.2;
+  for (let i = 0; i < COUNT; i++){
+    // Step 4: t = (i/80 + offset) % 1, getPointAt + getTangentAt
+    const t = ((i / COUNT + off) % 1 + 1) % 1;
+    curve.getPointAt(t, p);
+    curve.getTangentAt(t, tan);
+    q.setFromUnitVectors(up, tan);
+    // Step 5: every second link turned 90° around the tangent
+    if (i % 2) q.multiply(q90);
+    dummy.position.copy(p);
+    dummy.quaternion.copy(q);
+    dummy.scale.setScalar(linkScale);
+    dummy.updateMatrix();
+    chain.setMatrixAt(i, dummy.matrix);
+  }
+  chain.instanceMatrix.needsUpdate = true;
+
+  const s = target * 2, i0 = Math.min(1, Math.floor(s)), f = Math.min(1, s - i0);
+  tmpC.copy(colors[i0]).lerp(colors[i0 + 1], f);
+  light1.color.copy(tmpC); light2.color.copy(tmpC);
+  renderer.render(scene, camera);
+  requestAnimationFrame(frame);
+}
+frame();
+</script>
+</body>
+</html>

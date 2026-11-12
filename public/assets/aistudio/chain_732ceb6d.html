@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>3D Chain</title>
+<style>html,body{margin:0;height:100%;background:transparent;overflow:hidden}canvas{display:block;width:100%;height:100%}</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const COUNT = 80;
+const canvas = document.getElementById('gl');
+const renderer = new THREE.WebGLRenderer({canvas, antialias:true, alpha:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+
+const envScene = new THREE.Scene();
+envScene.add(new THREE.Mesh(new THREE.BoxGeometry(40,40,40), new THREE.MeshBasicMaterial({color:0x151212, side:THREE.BackSide})));
+[[0,15,0,20,1,20,0xffffff],[-15,0,5,1,12,12,0xffffff],[15,0,-5,1,10,10,0xffd9b0],[0,-10,12,16,1,6,0x888888]].forEach(([x,y,z,w,h,d,c])=>{
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), new THREE.MeshBasicMaterial({color:c}));
+  m.position.set(x,y,z); envScene.add(m);
+});
+scene.environment = new THREE.PMREMGenerator(renderer).fromScene(envScene).texture;
+
+const geo = new THREE.TorusGeometry(0.5, 0.12, 24, 48); geo.scale(1, 1.6, 1);
+const chain = new THREE.InstancedMesh(geo, new THREE.MeshStandardMaterial({color:0xffffff, metalness:1, roughness:0.2}), COUNT);
+chain.frustumCulled = false; scene.add(chain);
+
+const curve = new THREE.CatmullRomCurve3([
+  new THREE.Vector3(-9,6,0), new THREE.Vector3(-2,4,1), new THREE.Vector3(5,5,-1),
+  new THREE.Vector3(8,0,.5), new THREE.Vector3(2,-2,1.5), new THREE.Vector3(-6,-3,0),
+  new THREE.Vector3(-8,-6,-1), new THREE.Vector3(0,-7,1), new THREE.Vector3(9,-6,0)
+]);
+const linkScale = curve.getLength() / COUNT / 1.25;
+
+const colors = [new THREE.Color(1,1,1), new THREE.Color(1,.1,.1), new THREE.Color(80/255,220/255,1)];
+const l1 = new THREE.PointLight(0xffffff,3,0,2); l1.position.set(-6,6,8);
+const l2 = new THREE.PointLight(0xffffff,2,0,2); l2.position.set(8,-4,6);
+scene.add(l1, l2, new THREE.AmbientLight(0xffffff,.15));
+
+const up = new THREE.Vector3(0,1,0), p = new THREE.Vector3(), tan = new THREE.Vector3();
+const q = new THREE.Quaternion(), q90 = new THREE.Quaternion().setFromAxisAngle(up, Math.PI/2);
+const d = new THREE.Object3D(), tc = new THREE.Color();
+
+function resize(){
+  const w = innerWidth, h = innerHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.position.set(0, 0, Math.max(15, 17 / camera.aspect));
+  camera.updateProjectionMatrix();
+}
+addEventListener('resize', resize); resize();
+
+const start = performance.now();
+(function frame(now){
+  requestAnimationFrame(frame);
+  const sec = (now - start) / 1000;
+  const off = sec * 0.02;                       // chain keeps sliding by itself
+  for (let i = 0; i < COUNT; i++){
+    const t = ((i / COUNT + off) % 1 + 1) % 1;
+    curve.getPointAt(t, p); curve.getTangentAt(t, tan);
+    q.setFromUnitVectors(up, tan);
+    if (i % 2) q.multiply(q90);
+    d.position.copy(p); d.quaternion.copy(q); d.scale.setScalar(linkScale); d.updateMatrix();
+    chain.setMatrixAt(i, d.matrix);
+  }
+  chain.instanceMatrix.needsUpdate = true;
+  // light colour cycles: white -> red -> cyan -> white (every ~18 s)
+  const ph = (sec / 6) % 3, i0 = Math.floor(ph), f = ph - i0;
+  tc.copy(colors[i0]).lerp(colors[(i0 + 1) % 3], f);
+  l1.color.copy(tc); l2.color.copy(tc);
+  renderer.render(scene, camera);
+})(performance.now());
+</script>
+</body>
+</html>
